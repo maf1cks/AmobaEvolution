@@ -1,23 +1,39 @@
 using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
-using System.Collections; // Обязательно для использования Coroutines
-using System.Globalization; // Для форматирования валюты
+using System.Collections;
+using System.Globalization;
 using System; // Добавлено для использования делегата Action
 
 public class UIManager : MonoBehaviour
 {   
+    // --- НОВЫЕ ПОЛЯ ДЛЯ ЭКРАНОВ РЕЗУЛЬТАТА ---
+    [Header("Экраны Выигрыша/Проигрыша")]
+    // Панель, которая показывается при проигрыше/выигрыше (содержит текст и кнопку)
+    [SerializeField] private GameObject resultScreenPanel; 
+    // Кнопка, которую игрок должен нажать, чтобы начать анимацию возврата в меню
+    [SerializeField] private Button continueButton;
+    [SerializeField] private TextMeshProUGUI resultText; // Текст для отображения "Победа" / "Проигрыш"
+
     [Header("Элементы для Игры")]
     [SerializeField] private GameObject playerPrefab;
     [SerializeField] private SpriteRenderer gameTile;
     [SerializeField] private IntroUIManager introUIManager;
     [SerializeField] private Canvas menuCanvas;
+    [SerializeField] private GameManager gameManager;
+    
     // Все Canvas, которые будут активироваться
     [SerializeField] private GameObject casinoCanvas;
     [SerializeField] private GameObject magazinCanvas;
     [SerializeField] private GameObject arenaCanvas;
     [SerializeField] private GameObject evolutionCanvas;
     [SerializeField] private GameObject zadanieCanvas;
+    
+    // НОВЫЕ ПОЛЯ ДЛЯ ТЕКСТА В МЕНЮ
+    [Header("UI Элементы в Меню")]
+    [SerializeField] private TextMeshProUGUI menuField1;
+    [SerializeField] private TextMeshProUGUI menuField2;
+    [SerializeField] private TextMeshProUGUI menuField3;
     
     [Header("Системные Элементы Анимации")]
     // Ссылка на компонент Image (круглая черная картинка), который будет фейдером
@@ -33,7 +49,7 @@ public class UIManager : MonoBehaviour
     [SerializeField] private TextMeshProUGUI coinCount;
     private int currentCoins = 0; 
     [SerializeField] private TextMeshProUGUI pointCount;
-    private int currentCrystals = 0;
+    private int currentXP = 0;
     
     [Header("Кнопки (Main Menu Buttons)")]
     [SerializeField] private Button magazinButton;
@@ -47,34 +63,52 @@ public class UIManager : MonoBehaviour
     {
         // Инициализация при запуске (обычно считывается из PlayerPrefs или сохранения)
         currentCoins = 100;
-        currentCrystals = 5;
+        currentXP = 100;
         
         UpdateAllCurrencyDisplay();
         
         // --- УНИВЕРСАЛЬНАЯ ПОДПИСКА КНОПОК НА ПЕРЕХОД ---
-        // Все кнопки теперь запускают StartButtonTransition, передавая функцию-действие (Action), 
-        // которое должно произойти, когда экран полностью затемнен.
         if (magazinButton != null) magazinButton.onClick.AddListener(() => StartButtonTransition(OpenMagazinCanvas));
         if (arenaButton != null) arenaButton.onClick.AddListener(() => StartButtonTransition(OpenArenaCanvas));
         if (zadanieButton != null) zadanieButton.onClick.AddListener(() => StartButtonTransition(OpenZadanieCanvas));
         if (evolutionButton != null) evolutionButton.onClick.AddListener(() => StartButtonTransition(OpenEvolutionCanvas));
-        if (gameButton != null) gameButton.onClick.AddListener(() => StartButtonTransition(OpenGameCanvas)); // Действие для запуска игры
+        if (gameButton != null) gameButton.onClick.AddListener(() => StartButtonTransition(OpenGameCanvas)); 
         if (casinoButton != null) casinoButton.onClick.AddListener(() => StartButtonTransition(OpenCasinoCanvas));
         
-        // Убеждаемся, что фейдер изначально скрыт
+        // --- ПОДПИСКА КНОПКИ ДЛЯ ПРОДОЛЖЕНИЯ ---
+        if (continueButton != null) continueButton.onClick.AddListener(OnContinueButtonPressed);
+        
+        // Убеждаемся, что фейдер и панель результата изначально скрыты
         if (faderImage != null)
         {
             faderImage.gameObject.SetActive(false);
             faderImage.transform.localScale = Vector3.one * 0.01f;
         }
+        if (resultScreenPanel != null)
+        {
+            resultScreenPanel.SetActive(false);
+        }
     }
     
+    // --- НОВЫЙ МЕТОД: Обработчик нажатия кнопки "Продолжить" ---
+    private void OnContinueButtonPressed()
+    {
+        if (resultScreenPanel != null)
+        {
+            // 1. Скрываем панель результата
+            resultScreenPanel.SetActive(false);
+            
+            // 2. Запускаем анимацию перехода, которая вернет нас в меню
+            StartButtonTransition(OpenMenuCanvas);
+            Debug.Log("Действие: МАГАЗИН - открыт интерфейс магазина.");
+
+        }
+    }
+
     // --- ДЕЙСТВИЯ, ВЫПОЛНЯЕМЫЕ В СЕРЕДИНЕ ПЕРЕХОДА (ОТКРЫТИЕ CANVAS) ---
-    // Эти функции содержат логику смены Canvas и вызываются во время затемнения.
 
     private void OpenMagazinCanvas()
     {
-        // Скрываем все остальные Canvas, если они были активны
         HideAllCanvases();
         if (magazinCanvas != null) magazinCanvas.SetActive(true);
         if (menuCanvas != null) menuCanvas.enabled = false;
@@ -100,6 +134,7 @@ public class UIManager : MonoBehaviour
     private void OpenEvolutionCanvas()
     {   
         HideAllCanvases();
+        evolutionCanvas.GetComponent<EvolutionManager>().UpdateXP();
         if (evolutionCanvas != null) evolutionCanvas.SetActive(true);
         if (menuCanvas != null) menuCanvas.enabled = false;
         Debug.Log("Действие: ЭВОЛЮЦИЯ - открыт интерфейс эволюции персонажей/юнитов.");
@@ -130,21 +165,65 @@ public class UIManager : MonoBehaviour
         
         // Установка спрайтов игрового поля
         if (introUIManager != null && gameTile != null)
-        {
-             introUIManager.SetUpSpritesByLevel(gameTile, introUIManager.level, 2);
+        {   
+            introUIManager.SetUpSpritesByLevel(playerPrefab.GetComponent<SpriteRenderer>(), introUIManager.level, 3);
+            introUIManager.SetUpSpritesByLevel(gameTile, introUIManager.level, 2);
         }
+
+        gameManager.StartGame();
         
         Debug.Log("Действие: GAME - Меню отключено, игровой процесс активирован.");
+    }
+
+    // --- ФУНКЦИИ ВЫВОДА РЕЗУЛЬТАТА ---
+
+    public void OpenGameOverScreen(int enemiesKilledInLevel)
+    {
+        // 1. Скрываем все игровые элементы (игрока, тайлы и т.д.)
+        if (playerPrefab != null) playerPrefab.SetActive(false);
+        gameTile.sprite = null;
+        
+        // 2. Показываем панель результата и устанавливаем текст
+        if (resultScreenPanel != null)
+        {
+            if (resultText != null) resultText.text = "ПРОИГРЫШ";
+            if (menuField1 != null) menuField1.text = (enemiesKilledInLevel*2).ToString();
+            if (menuField2 != null) menuField2.text = (enemiesKilledInLevel).ToString();
+            if (menuField3 != null) menuField3.text = (enemiesKilledInLevel).ToString();
+            resultScreenPanel.SetActive(true);
+            
+        }
+        
+        Debug.Log("Результат: ПРОИГРЫШ. Ожидание нажатия кнопки для продолжения.");
+    }
+
+    public void OpenWinScreen(int enemiesKilledInLevel)
+    {
+        // 1. Скрываем все игровые элементы
+        if (playerPrefab != null) playerPrefab.SetActive(false);
+        gameTile.sprite = null;
+        
+        // 2. Показываем панель результата и устанавливаем текст
+        if (resultScreenPanel != null)
+        {
+            if (resultText != null) resultText.text = "ПОБЕДА!";
+            if (menuField1 != null) menuField1.text = (enemiesKilledInLevel*2).ToString();
+            if (menuField2 != null) menuField2.text = (enemiesKilledInLevel).ToString();
+            if (menuField3 != null) menuField3.text = (enemiesKilledInLevel).ToString();
+            resultScreenPanel.SetActive(true);
+        }
+        
+        Debug.Log("Результат: ПОБЕДА. Ожидание нажатия кнопки для продолжения.");
     }
     
     /// <summary>
     /// Действие, которое скрывает текущий активный Canvas и показывает главное меню.
-    /// Это будет использоваться кнопкой "Назад" в других Canvas.
     /// </summary>
     public void OpenMenuCanvas()
     {
         // 1. Скрываем все игровые Canvas
         HideAllCanvases();
+        gameTile.sprite = null;
 
         // 2. Деактивируем игрока, если он был активен
         if (playerPrefab != null) playerPrefab.SetActive(false);
@@ -155,7 +234,18 @@ public class UIManager : MonoBehaviour
             menuCanvas.enabled = true;
         }
 
+
         Debug.Log("Действие: МЕНЮ - Скрыты все Canvas, активировано главное меню.");
+    }
+
+    /// <summary>
+    /// НОВЫЙ МЕТОД: Включает или отключает видимость трех новых полей для текста.
+    /// </summary>
+    private void SetMenuTextFieldsActive(bool isActive)
+    {
+        if (menuField1 != null) menuField1.gameObject.SetActive(isActive);
+        if (menuField2 != null) menuField2.gameObject.SetActive(isActive);
+        if (menuField3 != null) menuField3.gameObject.SetActive(isActive);
     }
 
     /// <summary>
@@ -241,7 +331,16 @@ public class UIManager : MonoBehaviour
         faderImage.transform.localScale = endScale;
     }
 
-    // --- ЛОГИКА ВАЛЮТЫ (Без изменений) ---
+    // --- ЛОГИКА ВАЛЮТЫ ---
+
+    public int GetCurrentCoins()
+    {
+        return currentCoins;
+    }
+    public int GetCurrentXP()
+    {
+        return currentXP;
+    }
 
     public void AddCoins(int amount)
     {
@@ -249,9 +348,9 @@ public class UIManager : MonoBehaviour
         UpdateCoinDisplay();
     }
 
-    public void AddCrystals(int amount)
+    public void AddXP(int amount)
     {
-        currentCrystals += amount;
+        currentXP += amount;
         UpdatePointDisplay();
     }
 
@@ -259,6 +358,7 @@ public class UIManager : MonoBehaviour
     {
         if (coinCount != null)
         {
+            // N0 - форматирование с разделителем тысяч (например, 10,000)
             string formattedCoins = currentCoins.ToString("N0", CultureInfo.InvariantCulture);
             coinCount.text = formattedCoins;
         }
@@ -268,7 +368,7 @@ public class UIManager : MonoBehaviour
     {
         if (pointCount != null)
         {
-            pointCount.text = currentCrystals.ToString();
+            pointCount.text = currentXP.ToString();
         }
     }
 

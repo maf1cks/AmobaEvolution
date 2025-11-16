@@ -2,9 +2,9 @@
 /shelf/
 /workspace.xml
 # Rider ignored files
-/.idea.Test.iml
-/contentModel.xml
 /modules.xml
+/.idea.AmobaEvolution.iml
+/contentModel.xml
 /projectSettingsUpdater.xml
 # Ignored default folder with query files
 /queries/

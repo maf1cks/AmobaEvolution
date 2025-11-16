@@ -2,47 +2,64 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections;
+using System.Globalization; // Добавлено для форматирования
 
+/// <summary>
+/// Управляет логикой колеса фортуны: вращением, стоимостью, определением выигрыша.
+/// </summary>
 public class CasinoManager : MonoBehaviour
 {
-    [Header("Ссылки на UI")]
+    [Header("Ссылки на UI и Менеджеры")]
     [SerializeField] private UIManager uiManager;
     [SerializeField] private Button backButton;
     [SerializeField] private Button spinButton;
     [SerializeField] private TextMeshProUGUI winText;
     
     [Header("Настройки колеса")]
-    // Компонент Transform колеса, который будет вращаться
+    [Tooltip("Компонент Transform колеса, который будет вращаться.")]
     [SerializeField] private Transform wheelCasinoTransform; 
     
-    // Новые поля для случайной начальной скорости
-    [SerializeField] private float minInitialSpeed = 800f; // Минимальная начальная скорость вращения
-    [SerializeField] private float maxInitialSpeed = 1200f; // Максимальная начальная скорость вращения
+    [Tooltip("Минимальная начальная скорость вращения (градусы/сек).")]
+    [SerializeField] private float minInitialSpeed = 800f; 
+    [Tooltip("Максимальная начальная скорость вращения (градусы/сек).")]
+    [SerializeField] private float maxInitialSpeed = 1000f; 
     
-    [SerializeField] private float decelerationRate = 50f; // Скорость замедления
-    [SerializeField] private float minSpinTime = 2f; // Минимальное время вращения (фаза быстрой скорости)
-    [SerializeField] private float maxSpinTime = 5f; // Максимальное время вращения (фаза быстрой скорости)
+    [Tooltip("Скорость замедления (градусы/сек^2).")]
+    [SerializeField] private float decelerationRate = 900f; 
+    [Tooltip("Минимальное время вращения с высокой скоростью.")]
+    [SerializeField] private float minSpinTime = 2f; 
+    [Tooltip("Максимальное время вращения с высокой скоростью.")]
+    [SerializeField] private float maxSpinTime = 5f; 
+
+    [Header("Настройки отображения текста")]
+    [Tooltip("Время, через которое сообщение о выигрыше исчезнет.")]
+    [SerializeField] private float winMessageDuration = 3.0f; 
+
+    // --- Логика стоимости крутки ---
+    private bool isFirstSpinOfDay = true; // Флаг для первой бесплатной крутки
+    private const int SPIN_COST = 50; // Стоимость последующих круток
+    private const float SECTOR_ANGLE = 30f; // Ширина одного сектора (360/12)
 
     private bool isSpinning = false;
     private float currentSpeed;
 
     private void Start()
     {
+        // Инициализация ссылок на UIManager, если они не заданы
         if (uiManager == null)
         {
-            // Поиск UIManager, если не задан в Инспекторе
             uiManager = FindObjectOfType<UIManager>();
             if (uiManager == null)
             {
-                Debug.LogError("CasinoManager не нашел UIManager в сцене. Обратная навигация невозможна.");
+                Debug.LogError("CasinoManager не нашел UIManager в сцене. Управление валютой и навигация будут недоступны.");
             }
         }
         
         // Подписка кнопки "Назад" на переход в главное меню через UIManager
         if (backButton != null && uiManager != null)
         {
-            // Запускаем переход, передавая действие OpenMenuCanvas
             backButton.onClick.AddListener(() => uiManager.StartButtonTransition(uiManager.OpenMenuCanvas));
+            backButton.interactable = !isSpinning;
         }
 
         // Подписка кнопки "Крутить"
@@ -53,21 +70,78 @@ public class CasinoManager : MonoBehaviour
 
         // Изначально скрываем сообщение о выигрыше
         winText.text = "";
+        
+        Debug.Log($"Состояние казино: Первая крутка сегодня {(isFirstSpinOfDay ? "бесплатна" : $"стоит {SPIN_COST} монет")}.");
     }
 
     /// <summary>
-    /// Запускает процесс вращения колеса со случайной начальной скоростью.
+    /// Внешняя функция для сброса ежедневной бесплатной крутки (для использования, например, при смене дня).
+    /// </summary>
+    public void ResetDailySpin()
+    {
+        isFirstSpinOfDay = true;
+        Debug.Log("Ежедневная бесплатная крутка была сброшена.");
+    }
+
+    /// <summary>
+    /// Запускает процесс вращения колеса, включая проверку стоимости.
     /// </summary>
     private void StartSpin()
     {
-        if (isSpinning) return;
+        if (isSpinning || uiManager == null) return;
         
-        isSpinning = true;
-        spinButton.interactable = false; // Блокируем кнопку на время вращения
-        winText.text = "Крутится...";
+        // Останавливаем любую корутину очистки текста, чтобы новое сообщение не исчезло сразу
+        StopAllCoroutines(); 
+        
+        string costMessage = "";
+        bool canSpin = false;
+        
+        // --- ЛОГИКА СТОИМОСТИ КРУТКИ ---
+        if (isFirstSpinOfDay)
+        {
+            // БЕСПЛАТНАЯ КРУТКА
+            isFirstSpinOfDay = false; 
+            costMessage = "<size=120%><color=#33FF33>Крутка БЕСПЛАТНА!</color></size>";
+            canSpin = true;
+        }
+        else
+        {
+            // ПЛАТНАЯ КРУТКА
+            if (uiManager.GetCurrentCoins() >= SPIN_COST)
+            {
+                uiManager.AddCoins(-SPIN_COST); // Списываем монеты
+                costMessage = $"<size=120%><color=#FFFFFF>Списано {SPIN_COST} монет. Удачи!</color></size>";
+                canSpin = true;
+            }
+            else
+            {
+                // Недостаточно монет
+                costMessage = $"<size=150%><b><color=#FF4500>НЕДОСТАТОЧНО МОНЕТ (требуется {SPIN_COST})</color></b></size>";
+                winText.text = costMessage;
+                // Показываем сообщение о нехватке монет дольше, чем обычный выигрыш
+                StartCoroutine(ClearWinTextAfterDelay(winMessageDuration * 2)); 
+                Debug.LogWarning("Попытка крутки: Недостаточно монет.");
+                return; 
+            }
+        }
+        
+        // --- ЗАПУСК ВРАЩЕНИЯ ---
+        if (!canSpin) return;
 
-        // !!! Задаем СЛУЧАЙНУЮ начальную скорость
+        isSpinning = true;
+        spinButton.interactable = false; 
+        
+        if (backButton != null)
+        {
+             backButton.interactable = false; // Блокируем кнопку "Назад"
+        }
+        
+        // Показываем сообщение о стоимости перед началом вращения
+        winText.text = costMessage;
+
+        // Задаем СЛУЧАЙНУЮ начальную скорость
         currentSpeed = UnityEngine.Random.Range(minInitialSpeed, maxInitialSpeed);
+        
         StartCoroutine(SpinWheel());
     }
 
@@ -76,26 +150,25 @@ public class CasinoManager : MonoBehaviour
     /// </summary>
     private IEnumerator SpinWheel()
     {
-        // Время, пока колесо вращается с высокой скоростью (до начала замедления)
         float fastSpinDuration = UnityEngine.Random.Range(minSpinTime, maxSpinTime);
         float elapsedTime = 0f;
 
-        // --- Фаза быстрого вращения ---
+        // --- Фаза 1: Быстрое вращение ---
         while (elapsedTime < fastSpinDuration)
         {
-            // Вращаем колесо по оси Z
             wheelCasinoTransform.Rotate(Vector3.forward, currentSpeed * Time.deltaTime);
             elapsedTime += Time.deltaTime;
             yield return null;
         }
+        
+        // Очищаем winText перед началом замедления
+        winText.text = "";
 
-        // --- Фаза замедления и остановки ---
+        // --- Фаза 2: Замедление и остановка ---
         while (currentSpeed > 0)
         {
-            // Вращаем колесо
             wheelCasinoTransform.Rotate(Vector3.forward, currentSpeed * Time.deltaTime);
             
-            // Постепенно уменьшаем скорость (линейное замедление)
             currentSpeed -= decelerationRate * Time.deltaTime;
             
             if (currentSpeed < 0) currentSpeed = 0;
@@ -103,91 +176,111 @@ public class CasinoManager : MonoBehaviour
             yield return null;
         }
 
-        // Колесо остановилось
+        // --- Остановка ---
         isSpinning = false;
         spinButton.interactable = true;
+        
+        if (backButton != null)
+        {
+             backButton.interactable = true; // Разблокируем кнопку "Назад"
+        }
+        
         DetermineWin();
     }
 
     /// <summary>
     /// Определяет результат после остановки колеса по его финальному углу вращения.
-    /// Мы предполагаем 12 секторов по 30 градусов каждый.
+    /// Предполагается 12 секторов по 30 градусов каждый.
     /// </summary>
     private void DetermineWin()
     {
-        // Получаем угол Z в локальных координатах. 
-        // Приводим его к диапазону [0, 360) для удобства сравнения.
-        float finalAngle = wheelCasinoTransform.localEulerAngles.z % 360;
-        if (finalAngle < 0) finalAngle += 360; // Убедимся, что угол положительный
+        // Получаем угол Z в локальных координатах и приводим его к диапазону [0, 360)
+        float finalAngle = wheelCasinoTransform.localEulerAngles.z % 360f;
+        if (finalAngle < 0f) finalAngle += 360f;
+        
+        // Смещаем угол, чтобы центр сектора соответствовал оси вращения (середина сектора 30/2 = 15 градусов)
+        float shiftedAngle = (finalAngle + SECTOR_ANGLE / 2f) % 360f;
+
+        // Определяем 0-базовый индекс сектора (0 до 11)
+        int sectorIndex = Mathf.FloorToInt(shiftedAngle / SECTOR_ANGLE);
+        // Фактический номер сектора (1 до 12)
+        int sectorNumber = sectorIndex + 1;
         
         string winMessage;
-        
-        // Ширина одного сектора
-        const float sectorAngle = 30f; 
 
-        // Определяем сектор (диапазоны: [0-30), [30-60), [60-90), ..., [330-360) )
+        // Определяем стиль для выигрыша: Большой, жирный, золотой
+        string tagStart = "<size=150%><b><color=#FFD700>"; 
+        string tagEnd = "</color></b></size>";
 
-        if (finalAngle >= 0 * sectorAngle && finalAngle < 1 * sectorAngle) // Сектор 1 (0° - 30°)
+        // Используем switch по номеру сектора
+        switch (sectorNumber)
         {
-            winMessage = "Вы выиграли 50 монет!";
-            uiManager.AddCoins(50);
-        }
-        else if (finalAngle >= 1 * sectorAngle && finalAngle < 2 * sectorAngle) // Сектор 2 (30° - 60°)
-        {
-            winMessage = "Вы выиграли 1 кристалл!";
-            uiManager.AddCrystals(1);
-        }
-        else if (finalAngle >= 2 * sectorAngle && finalAngle < 3 * sectorAngle) // Сектор 3 (60° - 90°)
-        {
-            winMessage = "Вы выиграли 100 монет!";
-            uiManager.AddCoins(100);
-        }
-        else if (finalAngle >= 3 * sectorAngle && finalAngle < 4 * sectorAngle) // Сектор 4 (90° - 120°)
-        {
-            winMessage = "Не повезло! Попробуйте снова.";
-        }
-        else if (finalAngle >= 4 * sectorAngle && finalAngle < 5 * sectorAngle) // Сектор 5 (120° - 150°)
-        {
-            winMessage = "Вы выиграли 150 монет!";
-            uiManager.AddCoins(150);
-        }
-        else if (finalAngle >= 5 * sectorAngle && finalAngle < 6 * sectorAngle) // Сектор 6 (150° - 180°)
-        {
-            winMessage = "Вау! Вы выиграли 5 кристаллов!";
-            uiManager.AddCrystals(5);
-        }
-        else if (finalAngle >= 6 * sectorAngle && finalAngle < 7 * sectorAngle) // Сектор 7 (180° - 210°)
-        {
-            winMessage = "Вы выиграли 25 монет!";
-            uiManager.AddCoins(25);
-        }
-        else if (finalAngle >= 7 * sectorAngle && finalAngle < 8 * sectorAngle) // Сектор 8 (210° - 240°)
-        {
-            winMessage = "Вы выиграли 2 кристалла!";
-            uiManager.AddCrystals(2);
-        }
-        else if (finalAngle >= 8 * sectorAngle && finalAngle < 9 * sectorAngle) // Сектор 9 (240° - 270°)
-        {
-            winMessage = "Вы выиграли 300 монет!";
-            uiManager.AddCoins(300);
-        }
-        else if (finalAngle >= 9 * sectorAngle && finalAngle < 10 * sectorAngle) // Сектор 10 (270° - 300°)
-        {
-            winMessage = "Не повезло! Попробуйте снова.";
-        }
-        else if (finalAngle >= 10 * sectorAngle && finalAngle < 11 * sectorAngle) // Сектор 11 (300° - 330°)
-        {
-            winMessage = "Джекпот! Вы выиграли 500 монет!";
-            uiManager.AddCoins(500);
-        }
-        else // Сектор 12 (330° - 360°)
-        {
-            winMessage = "Вы выиграли 1 кристалл!";
-            uiManager.AddCrystals(1);
+            case 1: 
+                winMessage = "Вы выиграли 100 монет!";
+                uiManager?.AddCoins(100);
+                break;
+            case 2: 
+                winMessage = "Вы выиграли удвоитель опыта!";
+                break;
+            case 3: 
+                winMessage = "Вы выиграли 40 монет!";
+                uiManager?.AddCoins(40);
+                break;
+            case 4: 
+                winMessage = "Вы выиграли удвоитель монет!";
+                break;
+            case 5: 
+                winMessage = "Вы выиграли удвоитель скорости!";
+                break;
+            case 6: 
+                winMessage = "Вы выиграли 40 монет!";
+                uiManager?.AddCoins(40);
+                break;
+            case 7: 
+                winMessage = "Вы выиграли 50 опыта!";
+                uiManager?.AddXP(50);
+                break;
+            case 8: 
+                winMessage = "Вы выиграли 100 монет!";
+                uiManager?.AddCoins(100);
+                break;
+            case 9: 
+                winMessage = "Вы выиграли 40 монет!";
+                uiManager?.AddCoins(40);
+                break;
+            case 10: 
+                winMessage = "Вы выиграли удвоитель здоровья!";
+                break;
+            case 11: 
+                winMessage = "ДЖЕКПОТ! Вы выиграли 40 монет!";
+                uiManager?.AddCoins(40);
+                break;
+            case 12: 
+                winMessage = "Вы выиграли удвоитель урона!";
+                break;
+            default:
+                // При ошибке форматирование сбрасывается для более строгого сообщения
+                tagStart = "<color=#FF4500>"; 
+                tagEnd = "</color>";
+                winMessage = "Ошибка определения сектора. Угол: " + finalAngle.ToString("F2", CultureInfo.InvariantCulture);
+                Debug.LogError($"Не удалось определить сектор выигрыша. Сдвинутый угол: {shiftedAngle:F2}, Индекс: {sectorIndex}");
+                break;
         }
         
-        winText.text = winMessage;
-        // F2 форматирует число с двумя знаками после запятой
-        Debug.Log($"Казино: Колесо остановилось на угле {finalAngle:F2}°. 12 секторов по 30°. Результат: {winMessage}");
+        // Применяем форматирование к сообщению о выигрыше
+        winText.text = tagStart + winMessage + tagEnd;
+        
+        StartCoroutine(ClearWinTextAfterDelay(winMessageDuration));
+
+        Debug.Log($"Казино: Колесо остановилось на угле {finalAngle:F2}° (Сектор {sectorNumber}). Результат: {winMessage}");
+    }
+
+    /// <summary>
+    /// Корутина, которая очищает текст о выигрыше после заданной задержки.
+    /// </summary>
+    private IEnumerator ClearWinTextAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        winText.text = "";
     }
 }
