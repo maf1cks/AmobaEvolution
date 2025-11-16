@@ -5,7 +5,7 @@ public class IntroUIManager : MonoBehaviour
     
     [SerializeField] public SpriteRenderer NormisSprite;
     [SerializeField] public SpriteRenderer TileSprite;
-    [SerializeField] public CanvasGroup playerCanvasGroup;
+    [SerializeField] public MenuCanvas menuCanvas;
     
     [SerializeField] public Sprite Tile1Sprite;
     [SerializeField] public Sprite NormisAmobaSprite;
@@ -129,16 +129,17 @@ public class IntroUIManager : MonoBehaviour
 
     public void SetAlphaGameUI(int alpha)
     {
-        playerCanvasGroup.alpha = alpha;
+        menuCanvas.CanvasGroup.alpha = alpha;
     }
     public void SetInteractableGameUI(bool interactable)
     {
-        playerCanvasGroup.interactable = interactable;
+        menuCanvas.CanvasGroup.interactable = interactable;
     }
 
     public void OnAnimationEnded()
     {   
         SetAlphaGameUI(1);
         SetInteractableGameUI(true);
+        menuCanvas.StartLoadingLeaderbord();
     }
 }

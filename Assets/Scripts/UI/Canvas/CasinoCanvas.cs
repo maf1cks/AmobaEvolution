@@ -2,14 +2,16 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections;
+using Data;
+using UI;
 
-public class CasinoManager : MonoBehaviour
+public class CasinoCanvas : CanvasViewBase
 {
     [Header("Ссылки на UI")]
-    [SerializeField] private UIManager uiManager;
     [SerializeField] private Button backButton;
     [SerializeField] private Button spinButton;
     [SerializeField] private TextMeshProUGUI winText;
+    private MenuCanvas menuCanvas;
     
     [Header("Настройки колеса")]
     // Компонент Transform колеса, который будет вращаться
@@ -28,21 +30,24 @@ public class CasinoManager : MonoBehaviour
 
     private void Start()
     {
-        if (uiManager == null)
+        if (menuCanvas == null)
         {
             // Поиск UIManager, если не задан в Инспекторе
-            uiManager = FindObjectOfType<UIManager>();
-            if (uiManager == null)
+            menuCanvas = CanvasParentManager.TryGetCanvasByType<MenuCanvas>();
+            if (menuCanvas == null)
             {
                 Debug.LogError("CasinoManager не нашел UIManager в сцене. Обратная навигация невозможна.");
             }
         }
         
         // Подписка кнопки "Назад" на переход в главное меню через UIManager
-        if (backButton != null && uiManager != null)
+        if (backButton != null && menuCanvas != null)
         {
-            // Запускаем переход, передавая действие OpenMenuCanvas
-            backButton.onClick.AddListener(() => uiManager.StartButtonTransition(uiManager.OpenMenuCanvas));
+            backButton.onClick.AddListener(() =>
+            {
+                // Запускаем переход
+                CanvasParentManager.SetView(CanvasViewKey.Menu);
+            });
         }
 
         // Подписка кнопки "Крутить"
@@ -130,17 +135,17 @@ public class CasinoManager : MonoBehaviour
         if (finalAngle >= 0 * sectorAngle && finalAngle < 1 * sectorAngle) // Сектор 1 (0° - 30°)
         {
             winMessage = "Вы выиграли 50 монет!";
-            uiManager.AddCoins(50);
+            EntryPoint.Instance.GetManager<ValutaManager>().AddValuta(ValutaType.Coins, 50);
         }
         else if (finalAngle >= 1 * sectorAngle && finalAngle < 2 * sectorAngle) // Сектор 2 (30° - 60°)
         {
             winMessage = "Вы выиграли 1 кристалл!";
-            uiManager.AddCrystals(1);
+            EntryPoint.Instance.GetManager<ValutaManager>().AddValuta(ValutaType.Experience, 1);
         }
         else if (finalAngle >= 2 * sectorAngle && finalAngle < 3 * sectorAngle) // Сектор 3 (60° - 90°)
         {
             winMessage = "Вы выиграли 100 монет!";
-            uiManager.AddCoins(100);
+            EntryPoint.Instance.GetManager<ValutaManager>().AddValuta(ValutaType.Coins, 100);
         }
         else if (finalAngle >= 3 * sectorAngle && finalAngle < 4 * sectorAngle) // Сектор 4 (90° - 120°)
         {
@@ -149,27 +154,27 @@ public class CasinoManager : MonoBehaviour
         else if (finalAngle >= 4 * sectorAngle && finalAngle < 5 * sectorAngle) // Сектор 5 (120° - 150°)
         {
             winMessage = "Вы выиграли 150 монет!";
-            uiManager.AddCoins(150);
+            EntryPoint.Instance.GetManager<ValutaManager>().AddValuta(ValutaType.Coins, 150);
         }
         else if (finalAngle >= 5 * sectorAngle && finalAngle < 6 * sectorAngle) // Сектор 6 (150° - 180°)
         {
             winMessage = "Вау! Вы выиграли 5 кристаллов!";
-            uiManager.AddCrystals(5);
+            EntryPoint.Instance.GetManager<ValutaManager>().AddValuta(ValutaType.Coins, 150);
         }
         else if (finalAngle >= 6 * sectorAngle && finalAngle < 7 * sectorAngle) // Сектор 7 (180° - 210°)
         {
             winMessage = "Вы выиграли 25 монет!";
-            uiManager.AddCoins(25);
+            EntryPoint.Instance.GetManager<ValutaManager>().AddValuta(ValutaType.Coins, 150);
         }
         else if (finalAngle >= 7 * sectorAngle && finalAngle < 8 * sectorAngle) // Сектор 8 (210° - 240°)
         {
             winMessage = "Вы выиграли 2 кристалла!";
-            uiManager.AddCrystals(2);
+            EntryPoint.Instance.GetManager<ValutaManager>().AddValuta(ValutaType.Experience, 2);
         }
         else if (finalAngle >= 8 * sectorAngle && finalAngle < 9 * sectorAngle) // Сектор 9 (240° - 270°)
         {
             winMessage = "Вы выиграли 300 монет!";
-            uiManager.AddCoins(300);
+            EntryPoint.Instance.GetManager<ValutaManager>().AddValuta(ValutaType.Coins, 300);
         }
         else if (finalAngle >= 9 * sectorAngle && finalAngle < 10 * sectorAngle) // Сектор 10 (270° - 300°)
         {
@@ -178,12 +183,12 @@ public class CasinoManager : MonoBehaviour
         else if (finalAngle >= 10 * sectorAngle && finalAngle < 11 * sectorAngle) // Сектор 11 (300° - 330°)
         {
             winMessage = "Джекпот! Вы выиграли 500 монет!";
-            uiManager.AddCoins(500);
+            EntryPoint.Instance.GetManager<ValutaManager>().AddValuta(ValutaType.Coins, 500);
         }
         else // Сектор 12 (330° - 360°)
         {
             winMessage = "Вы выиграли 1 кристалл!";
-            uiManager.AddCrystals(1);
+            EntryPoint.Instance.GetManager<ValutaManager>().AddValuta(ValutaType.Coins, 1);
         }
         
         winText.text = winMessage;
